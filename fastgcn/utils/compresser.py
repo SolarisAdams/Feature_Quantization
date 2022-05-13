@@ -14,22 +14,33 @@ class Compresser(object):
         self.device = device
         self.feat_dim = -1
         self.quantized = False
+        self.codebooks = None
+        self.info = None
 
 
     
-    def compress(self, features, batch_size=-1):
+    def compress(self, features, dn=None, batch_size=-1):
         self.batch_size = batch_size
-
-        if self.mode == "sq":
-            return self.sq_compresser(features)
-
-        elif self.mode == "vq":
-            if self.batch_size == -1:
-                return self.vq_compresser(features)
-            else:
-                return self.vq_compresser_batch(features)
+        if dn:
+            self.fn = "/data/giant_graph/quantized/" + dn + "_" + self.mode + "_" + str(self.length) + "_" + str(self.width) + ".pkl"
+        import os 
+        if dn and os.path.exists(self.fn):
+            (compressed, self.codebooks, self.quantized, self.info, self.feat_dim) = th.load(self.fn)
+            return compressed
         else:
-            raise ValueError("mode must be sq or vq")        
+
+            if self.mode == "sq":
+                compressed = self.sq_compresser(features)
+
+            elif self.mode == "vq":
+                if self.batch_size == -1:
+                    compressed = self.vq_compresser(features)
+                else:
+                    compressed = self.vq_compresser_batch(features)
+            else:
+                raise ValueError("mode must be sq or vq")     
+            th.save((compressed, self.codebooks, self.quantized, self.info, self.feat_dim), self.fn)
+            return compressed
    
     def vq_compresser(self, features):
         # vector quantization

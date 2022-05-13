@@ -25,7 +25,7 @@ class Compresser(object):
             self.fn = "/data/giant_graph/quantized/" + dn + "_" + self.mode + "_" + str(self.length) + "_" + str(self.width) + ".pkl"
         import os 
         if dn and os.path.exists(self.fn):
-            (compressed, self.codebooks, self.quantized, self.info, self.feat_dim) = torch.load(self.fn)
+            (compressed, self.codebooks, self.quantized, self.info, self.feat_dim) = th.load(self.fn)
             return compressed
         else:
 
@@ -39,7 +39,7 @@ class Compresser(object):
                     compressed = self.vq_compresser_batch(features)
             else:
                 raise ValueError("mode must be sq or vq")     
-            torch.save((compressed, self.codebooks, self.quantized, self.info, self.feat_dim), self.fn)
+            th.save((compressed, self.codebooks, self.quantized, self.info, self.feat_dim), self.fn)
             return compressed
    
     def vq_compresser(self, features):
