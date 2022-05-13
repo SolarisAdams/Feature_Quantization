@@ -38,8 +38,9 @@ class Compresser(object):
                 else:
                     compressed = self.vq_compresser_batch(features)
             else:
-                raise ValueError("mode must be sq or vq")     
-            th.save((compressed, self.codebooks, self.quantized, self.info, self.feat_dim), self.fn)
+                raise ValueError("mode must be sq or vq")   
+            if self.quantized:  
+                th.save((compressed, self.codebooks, self.quantized, self.info, self.feat_dim), self.fn)
             return compressed
    
     def vq_compresser(self, features):
