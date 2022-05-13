@@ -83,6 +83,7 @@ initializing:
 compress:
 
 - features: the features to be quantized
+- dn: dataset name, if set, would cache quantization result
 - batch_size: for vq only, read and quantize a batch each time, only mag240m needs , doesn't affect training.
 
 decompress:
