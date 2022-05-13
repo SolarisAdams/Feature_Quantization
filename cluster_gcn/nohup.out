@@ -1,0 +1,45 @@
+Using backend: pytorch
+WARNING:root:The OGB package is out of date. Your version is 1.3.1, while the latest version is 1.3.3.
+Namespace(batch_size=20, dataset='ogbn-papers100m', dropout=0.5, gpu=0, log_every=100, lr=0.003, n_epochs=30, n_hidden=128, n_layers=1, normalize=True, note='self-loop-reddit-non-sym-ly3-pp-cluster-2-2-wd-5e-4', psize=5000, rnd_seed=3, self_loop=True, test_batch_size=1000, use_pp=True, use_val=True, val_every=1, weight_decay=0.0)
+load ogbn-papers100M
+finish loading ogbn-papers100M
+torch.Size([111059956, 128])
+1207179 125265 214338
+finish constructing ogbn-papers100M
+cpu 172
+----Data statistics------'
+    #Edges 3231371744
+    #Classes 172
+    #Train samples 1207179
+    #Val samples 125265
+    #Test samples 214338
+adding self-loop edges
+features shape,  torch.Size([1207179, 128])
+precalculating
+labels shape: torch.Size([111059956])
+features shape,  torch.Size([111059956, 128])
+Namespace(batch_size=20, dataset='ogbn-papers100m', dropout=0.5, gpu=0, log_every=100, lr=0.003, n_epochs=30, n_hidden=128, n_layers=1, normalize=True, note='self-loop-reddit-non-sym-ly3-pp-cluster-2-2-wd-5e-4', psize=5000, rnd_seed=3, self_loop=True, test_batch_size=1000, use_pp=True, use_val=True, val_every=1, weight_decay=0.0)
+Using multi-class loss
+current memory after model before training 221.505859375
+epoch:0/30, Iteration 0/250:training loss 5.28307580947876
+epoch:0/30, Iteration 100/250:training loss 2.05993390083313
+epoch:0/30, Iteration 200/250:training loss 1.7112224102020264
+current memory: 231.78515625
+Traceback (most recent call last):
+  File "cluster_gcn.py", line 240, in <module>
+    main(args)
+  File "cluster_gcn.py", line 176, in main
+    model, g, labels, val_mask, multitask)
+  File "/home/Adama/DGL/feature_compression/cluster_gcn/utils.py", line 54, in evaluate
+    logits = model(g)
+  File "/home/Adama/Envs/DGL/lib/python3.6/site-packages/torch/nn/modules/module.py", line 727, in _call_impl
+    result = self.forward(*input, **kwargs)
+  File "/home/Adama/DGL/feature_compression/cluster_gcn/modules.py", line 95, in forward
+    h = layer(g, h)
+  File "/home/Adama/Envs/DGL/lib/python3.6/site-packages/torch/nn/modules/module.py", line 727, in _call_impl
+    result = self.forward(*input, **kwargs)
+  File "/home/Adama/DGL/feature_compression/cluster_gcn/modules.py", line 46, in forward
+    h = self.concat(h, ah, norm)
+  File "/home/Adama/DGL/feature_compression/cluster_gcn/modules.py", line 58, in concat
+    ah = ah * norm
+RuntimeError: Expected all tensors to be on the same device, but found at least two devices, cuda:0 and cpu!

@@ -5,6 +5,7 @@ import torch
 import torch.nn.functional as F
 import torch.optim as optim
 import numpy as np
+import math
 
 from models import GCN
 from sampler import Sampler_FastGCN, Sampler_ASGCN
@@ -17,8 +18,9 @@ import scipy.sparse as sp
 def get_args():
     # Training settings
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset', type=str, default='cora',
+    parser.add_argument('--dataset', type=str, default='reddit',
                         help='dataset name.')
+    parser.add_argument('--gpu', type=int, default=0)
     # model can be "Fast" or "AS"
     parser.add_argument('--model', type=str, default='Fast',
                         help='model name.')
@@ -29,17 +31,17 @@ def get_args():
     parser.add_argument('--fastmode', action='store_true', default=False,
                         help='Validate during training pass.')
     parser.add_argument('--seed', type=int, default=123, help='Random seed.')
-    parser.add_argument('--epochs', type=int, default=100,
+    parser.add_argument('--epochs', type=int, default=300,
                         help='Number of epochs to train.')
-    parser.add_argument('--lr', type=float, default=0.0007,
+    parser.add_argument('--lr', type=float, default=0.001,
                         help='Initial learning rate.')
-    parser.add_argument('--weight_decay', type=float, default=5e-4,
+    parser.add_argument('--weight_decay', type=float, default=0,
                         help='Weight decay (L2 loss on parameters).')
-    parser.add_argument('--hidden', type=int, default=16,
+    parser.add_argument('--hidden', type=int, default=128,
                         help='Number of hidden units.')
-    parser.add_argument('--dropout', type=float, default=0.0,
+    parser.add_argument('--dropout', type=float, default=0.5,
                         help='Dropout rate (1 - keep probability).')
-    parser.add_argument('--batchsize', type=int, default=256,
+    parser.add_argument('--batchsize', type=int, default=1024,
                         help='batchsize for train')
     parser.add_argument('--mode', type=str, default='sq')
     parser.add_argument('--width', type=int, default=1)
@@ -49,32 +51,52 @@ def get_args():
     return args
 
 
-def train(train_ind, train_labels, batch_size, train_times):
+def train(train_nid, train_labels, batch_size, train_times, epochs):
     t = time.time()
     model.train()
     for epoch in range(train_times):
-        for batch_inds, batch_labels in get_batches(train_ind,
+        for batch_inds, batch_labels in get_batches(train_nid,
                                                     train_labels,
                                                     batch_size):
+            # print(g.ndata["labels"][batch_inds[:10]], batch_labels[:10])
             sampled_feats, sampled_adjs, var_loss = model.sampling(
                 batch_inds)
-            # print(sampled_feats.shape)
+            sampled_feats = sampled_feats.to(device)
+
+            # print(sampled_feats.shape, [sampled_adjs[i].shape for i in range(len(sampled_adjs))])
             optimizer.zero_grad()
             output = model(sampled_feats, sampled_adjs)
             loss_train = loss_fn(output, batch_labels) + 0.5 * var_loss
             acc_train = accuracy(output, batch_labels)
             loss_train.backward()
             optimizer.step()
+        
+        print('Epoch: {:04d}, train acc: {:.4f}, loss: {:.4f}, GPU memory:{:.4f}MB'.format(epoch + epochs*train_times, acc_train, loss_train, torch.cuda.max_memory_allocated() / 1024 / 1024))
     # just return the train loss of the last train epoch
     return loss_train.item(), acc_train.item(), time.time() - t
 
 
-def test(test_adj, test_feats, test_labels, epoch):
+def test(test_nid, test_labels, batch_size, num_classes):
     t = time.time()
     model.eval()
-    outputs = model(test_feats, test_adj)
-    loss_test = loss_fn(outputs, test_labels)
-    acc_test = accuracy(outputs, test_labels)
+    with torch.no_grad():
+        outputs = torch.zeros((len(test_nid), num_classes))
+        labels = torch.zeros(len(test_nid), dtype=torch.long)
+        for i, (batch_inds, batch_labels) in enumerate(get_batches(test_nid,
+                                                                test_labels,
+                                                                batch_size)):
+
+            sampled_feats, sampled_adjs, var_loss = model.sampling(
+                batch_inds)
+            sampled_feats = sampled_feats.to(device)
+
+            # print(sampled_feats.shape)
+            outputs[i*batch_size:(i+1)*batch_size] = model(sampled_feats, sampled_adjs).to("cpu")
+            labels[i*batch_size:(i+1)*batch_size] = batch_labels.to("cpu")
+
+        
+        loss_test = loss_fn(outputs, labels)
+        acc_test = accuracy(outputs, labels)
 
     return loss_test.item(), acc_test.item(), time.time() - t
 
@@ -82,6 +104,7 @@ def test(test_adj, test_feats, test_labels, epoch):
 if __name__ == '__main__':
     # load data, set superpara and constant
     args = get_args()
+
 
     if args.dataset == 'reddit':
         g, n_classes = load_reddit()
@@ -102,10 +125,12 @@ if __name__ == '__main__':
         srcs, dsts = g.all_edges()
         g.add_edges(dsts, srcs)         
     elif args.dataset == 'mag240m':
-        g, n_classes, feats = load_mag240m()            
+        g, n_classes, feats = load_mag240m()  
+        g.ndata["test_mask"] = g.ndata["val_mask"]         
     else:
         raise Exception('unknown dataset')
     print(g)
+
 
     # adj, features, adj_train, train_features, y_train, y_test, test_index = \
     #     load_data(args.dataset)
@@ -126,17 +151,16 @@ if __name__ == '__main__':
 
 
     features = train_features = g.ndata["features"]
-    y_train = y_test = F.one_hot(g.ndata["labels"], num_classes=n_classes)
+    # y_train = y_test = F.one_hot(g.ndata["labels"], num_classes=n_classes)
     test_index = torch.nonzero(g.ndata["test_mask"]).flatten()
-    train_index = torch.nonzero(g.ndata["test_mask"]).flatten()
-    del g
-    y_test = y_test[test_index]
-    # y_train = y_train[train_index]
+    y_test = F.one_hot(g.ndata["labels"][test_index], num_classes=n_classes)
+    train_index = torch.nonzero(g.ndata["train_mask"]).flatten()
+    y_train = F.one_hot(g.ndata["labels"][train_index], num_classes=n_classes)
+    # del g
+    # y_test = y_test[test_index]
+    # y_train = y_train[train_index
 
-
-
-
-    layer_sizes = [128, 128]
+    layer_sizes = [4096, 2048, 1024]
     input_dim = compresser.feat_dim
     train_nums = adj_train.shape[0]
     test_gap = args.test_gap
@@ -148,7 +172,8 @@ if __name__ == '__main__':
         torch.cuda.manual_seed(args.seed)
     # set device
     if args.cuda:
-        device = torch.device(3)
+        device = torch.device(args.gpu)
+        torch.cuda.set_device(device)
         print("use cuda")
     else:
         device = torch.device("cpu")
@@ -159,11 +184,11 @@ if __name__ == '__main__':
     y_train = torch.LongTensor(y_train).to(device).max(1)[1]
     # print(test_index)
     # print(adj)
-    test_adj = [adj, adj[test_index, :]]
+    # test_adj = [adj, adj[test_index, :]]
     test_feats = features
     test_labels = y_test
-    test_adj = [sparse_mx_to_torch_sparse_tensor(cur_adj).to(device)
-                for cur_adj in test_adj]
+    # test_adj = [sparse_mx_to_torch_sparse_tensor(cur_adj).to(device)
+    #             for cur_adj in test_adj]
     test_labels = torch.LongTensor(test_labels).to(device).max(1)[1]
 
     # init the sampler
@@ -182,7 +207,7 @@ if __name__ == '__main__':
         exit()
 
     # init model, optimizer and loss function
-    model = GCN(nfeat=features.shape[1],
+    model = GCN(nfeat=input_dim,
                 nhid=args.hidden,
                 nclass=nclass,
                 dropout=args.dropout,
@@ -191,17 +216,20 @@ if __name__ == '__main__':
                            lr=args.lr, weight_decay=args.weight_decay)
     loss_fn = F.nll_loss
     # loss_fn = torch.nn.CrossEntropyLoss()
-
+    print(model)
     # train and test
     for epochs in range(0, args.epochs // test_gap):
-        train_loss, train_acc, train_time = train(np.arange(train_nums),
+        train_loss, train_acc, train_time = train(train_index,
                                                   y_train,
                                                   args.batchsize,
-                                                  test_gap)
-        test_loss, test_acc, test_time = test(test_adj,
-                                              test_feats,
+                                                  test_gap,
+                                                  epochs)
+        print("testing!")
+        torch.cuda.synchronize()        
+        test_loss, test_acc, test_time = test(test_index,
                                               test_labels,
-                                              args.epochs)
+                                              math.ceil(args.batchsize),
+                                              nclass)
         print(f"epchs:{epochs * test_gap}~{(epochs + 1) * test_gap - 1} "
               f"train_loss: {train_loss:.3f}, "
               f"train_acc: {train_acc:.3f}, "
@@ -210,4 +238,4 @@ if __name__ == '__main__':
               f"test_acc: {test_acc:.3f}, "
               f"test_times: {test_time:.3f}s")
     with open("results/acc.txt", "a") as f:
-        print(args.dataset, args.width, args.lens, "FastGCN", test_acc, sep="\t", file=f)    
+        print(args.dataset, args.width, args.length, args.mode, "FastGCN", test_acc, sep="\t", file=f)    

@@ -30,8 +30,9 @@ class Sampler:
         self.train_nodes_number = self.adj.shape[0]
 
     def load_features(self, nodes):
+        # print(max(nodes), len(self.features))
         x0 = self.compresser.decompress(self.features[nodes], self.device)
-        print(x0.shape)
+        # print(x0.shape)
         return x0
 
     def sampling(self, v_indices):
@@ -59,13 +60,14 @@ class Sampler_FastGCN(Sampler):
             v: batch nodes list
         """
         all_support = [[]] * self.num_layers
-
         cur_out_nodes = v
         for layer_index in range(self.num_layers-1, -1, -1):
             cur_sampled, cur_support = self._one_layer_sampling(
                 cur_out_nodes, self.layer_sizes[layer_index])
             all_support[layer_index] = cur_support
             cur_out_nodes = cur_sampled
+        # print(all_support[0].todense())
+        # print(all_support[1].todense())
 
         all_support = self._change_sparse_to_tensor(all_support)
         sampled_X0 = self.load_features(cur_out_nodes)

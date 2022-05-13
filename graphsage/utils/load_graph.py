@@ -108,7 +108,7 @@ def load_mag240m():
 
     train_idx = dataset.get_idx_split('train')+offset
     val_idx = dataset.get_idx_split('valid')+offset
-    test_idx = dataset.get_idx_split('test')+offset
+    test_idx = dataset.get_idx_split('valid')+offset
     # graph = graph.formats("csc") 
 
     full_feat = np.memmap(
@@ -146,7 +146,7 @@ def load_mag240m_subgraph():
     # alternatively, you can do the following.
     train_idx = dataset.get_idx_split('train')
     val_idx = dataset.get_idx_split('valid')
-    test_idx = dataset.get_idx_split('test')
+    test_idx = dataset.get_idx_split('valid')
 
     train_mask = th.zeros((graph.number_of_nodes(),), dtype=th.bool)
     train_mask[train_idx] = True
