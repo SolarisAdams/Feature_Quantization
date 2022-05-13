@@ -14,7 +14,7 @@ from dgl.data import register_data_args
 
 from modules import GraphSAGE
 from sampler import ClusterIter
-from utils import Logger, evaluate, save_log_dir, load_data
+from utils import Logger, evaluate, save_log_dir, load_data, calc_f1
 from utils2.load_graph import *
 
 def main(args):
@@ -153,6 +153,7 @@ def main(args):
     best_f1 = -1
     loss_mean = 0
     tic = time.time()
+    f1_list = []
 
     for epoch in range(args.n_epochs):
         for j, cluster in enumerate(cluster_iterator):
@@ -166,16 +167,19 @@ def main(args):
             batch_train_mask = cluster.ndata['train_mask']
             loss = loss_f(pred[batch_train_mask],
                           batch_labels[batch_train_mask])
-
+            train_f1_mic, _ = calc_f1(batch_labels[batch_train_mask].detach().cpu().numpy(), 
+                pred[batch_train_mask].detach().cpu().numpy(), multitask)
+            f1_list.append(train_f1_mic)
+            f1_list = f1_list[-100:]
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
             # in PPI case, `log_every` is chosen to log one time per epoch. 
             # Choose your log freq dynamically when you want more info within one epoch
-            loss_mean = loss_mean*0.9 + loss.item()*0.1
+            loss_mean = loss_mean*0.99 + loss.item()*0.01
             if j % args.log_every == 0:
                 print(f"epoch:{epoch}/{args.n_epochs}, Iteration {j}/"
-                      f"{len(cluster_iterator)}:training loss", loss_mean)
+                      f"{len(cluster_iterator)}:training loss", loss_mean, "train f1:", np.mean(f1_list))
         print("current memory:",
               torch.cuda.memory_allocated(device=pred.device) / 1024 / 1024, "time:", time.time() - tic, "\n")
         tic = time.time()
@@ -215,7 +219,7 @@ if __name__ == '__main__':
                         help="learning rate")
     parser.add_argument("--n-epochs", type=int, default=200,
                         help="number of training epochs")
-    parser.add_argument("--log-every", type=int, default=100,
+    parser.add_argument("--log-every", type=int, default=30,
                         help="the frequency to save model")
     parser.add_argument("--batch-size", type=int, default=20,
                         help="batch size")

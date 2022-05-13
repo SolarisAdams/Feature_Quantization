@@ -338,9 +338,9 @@ if __name__ == '__main__':
     compresser = Compresser(args.mode, args.length, args.width)
     if args.dataset=="mag240m":
         
-        g.ndata["features"] = compresser.compress(feats, batch_size=50000)
+        g.ndata["features"] = compresser.compress(feats, args.dataset, batch_size=50000)
     else:
-        g.ndata["features"] = compresser.compress(g.ndata.pop("features"))
+        g.ndata["features"] = compresser.compress(g.ndata.pop("features"), args.dataset)
 
 ####################################################################################################################
 
