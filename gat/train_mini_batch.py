@@ -17,7 +17,6 @@ import torch.nn.functional as F
 import dgl
 from dgl.data import register_data_args
 from dgl.data import CoraGraphDataset, CiteseerGraphDataset, PubmedGraphDataset
-from load_graph import *
 
 from gat import GAT
 from torch.optim.lr_scheduler import ExponentialLR
@@ -139,6 +138,7 @@ def main(args):
     print(g.ndata['features'][:3])
 ####################################################################################################################
 
+    feat_dim = compresser.feat_dim
     features = g.ndata.pop('features')
     labels = g.ndata.pop('labels').long()
     # labels = g.ndata['labels'].long()
@@ -275,7 +275,7 @@ def main(args):
             t1 = time.time()
 
         scheduler.step()
-        if epoch >= 3:
+        if epoch >= 2:
             dur.append(time.time() - t0)
         print("Epoch {:05d} | Time(s) {:.4f} | Loss {:.4f}".
               format(epoch, np.mean(dur), avg_loss.item()))            
