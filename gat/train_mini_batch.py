@@ -238,9 +238,10 @@ def main(args):
     avg_loss = 2
     # initialize graph
     dur = []
+    time_list = []
     for epoch in range(args.epochs):
         model.train()
-        if epoch >= 3:
+        if epoch >= 1:
             t0 = time.time()
         t1 = time.time()
         for step, (input_nodes, seeds, blocks) in enumerate(dataloader):
@@ -272,12 +273,13 @@ def main(args):
                 print("Epoch {:05d} | Step {:05d} | Loss {:.4f} | Tputs {:.4f} | Train Acc {:.4f} | GPU {:.1f} MB".
                         format(epoch, step, avg_loss.item(), tputs, acc, torch.cuda.max_memory_allocated() / 1024 ** 2))
             # print(time.time()-t1, t2-t1, t3-t2, t23-t2, t3-t23, t4-t3, t5-t4, time.time()-t5)
+            time_list.append([time.time()-t1, t2-t1, t23-t2, t3-t23, t4-t3, t5-t4, time.time()-t5])
             t1 = time.time()
 
         scheduler.step()
-        if epoch >= 2:
+        if epoch >= 1:
             dur.append(time.time() - t0)
-        print("Epoch {:05d} | Time(s) {:.4f} | Loss {:.4f}".
+        print("Epoch {:05d} | Time(s) {:.4f} | Loss {:.4f}\n".
               format(epoch, np.mean(dur), avg_loss.item()))            
         if epoch % args.eval_every == args.eval_every - 1:
             model.eval()
@@ -299,9 +301,13 @@ def main(args):
 
     print()
     print("Best Accuracy {:.4f}".format(best_acc))
+    with open("results/time_log.txt", "a+") as f:
+        for i in np.mean(time_list[3:], axis=0):
+            print("{:.5f}".format(i), sep="\t", end="\t", file=f)
+        print(args.mode, args.length, args.width, args.dataset, args.num_workers, args.gpu, args.batch_size, "GAT", sep="\t", file=f)         
 
     with open("results/acc.txt", "a") as f:
-        print(args.dataset, args.width, args.lens, "GAT", acc, sep="\t", file=f)            
+        print(args.dataset, args.width, args.length, "GAT", acc, sep="\t", file=f)            
 
 
 if __name__ == '__main__':
@@ -311,7 +317,7 @@ if __name__ == '__main__':
     parser.add_argument("--dataset", type=str, default="reddit")
     parser.add_argument("--gpu", type=int, default=3,
                         help="which GPU to use. Set -1 to use CPU.")
-    parser.add_argument("--epochs", type=int, default=100,
+    parser.add_argument("--epochs", type=int, default=5,
                         help="number of training epochs")
     parser.add_argument("--num-heads", type=int, default=8,
                         help="number of hidden attention heads")
@@ -338,7 +344,7 @@ if __name__ == '__main__':
                         help="indicates whether to use early stop or not")
     parser.add_argument('--fastmode', action="store_true", default=False,
                         help="skip re-evaluate the validation set")
-    parser.add_argument('--log-every', type=int, default=50)
+    parser.add_argument('--log-every', type=int, default=20)
     parser.add_argument('--eval-every', type=int, default=5)
     parser.add_argument('--data-gpu', action="store_true", default=False)
     parser.add_argument('--num-workers', type=int, default=6)
