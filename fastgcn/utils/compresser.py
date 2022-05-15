@@ -179,7 +179,7 @@ class Compresser(object):
         epsilon = 1e-5
         print("start compressing, precision=", self.length)
         perm = th.randperm(features.shape[0])
-        sample = features[perm[:self.batch_size]]
+        sample = features[perm[:100000]]
         fmin = max(np.percentile(np.abs(sample), 0.5), epsilon)
         fmax = max(np.percentile(np.abs(sample), 99.5), 2*epsilon)
         print(fmin, fmax)
