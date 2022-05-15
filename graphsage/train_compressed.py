@@ -50,7 +50,7 @@ def evaluate(model, g, nfeat, labels, val_nid, device, compresser):
 
     with th.no_grad():
         perm = th.randperm(len(val_nid))
-        val_nid = val_nid[perm][:len(val_nid)//2]
+        val_nid = val_nid[perm][:len(val_nid)//3]
         pred = th.zeros(g.num_nodes(), model.n_classes)
         sampler = dgl.dataloading.MultiLayerNeighborSampler([int(fanout) for fanout in args.fan_out.split(',')])
         dataloader = dgl.dataloading.NodeDataLoader(
@@ -60,7 +60,7 @@ def evaluate(model, g, nfeat, labels, val_nid, device, compresser):
             use_ddp=False,
             device=device,
             # device=None,
-            batch_size=100,
+            batch_size=50,
             shuffle=False,
             drop_last=False,
             num_workers=0)
@@ -214,6 +214,8 @@ def run(proc_id, n_gpus, args, devices, data, compresser):
                 print('Epoch {:05d} | Step {:05d} | Loss {:.4f} | Train Acc {:.4f} | Speed (samples/sec) {:.4f} | GPU {:.1f} MB'.format(
                     epoch, step, loss_mean, acc_mean, np.mean(iter_tput[3:]), th.cuda.max_memory_allocated() / 1000000))
 
+            # del batch_inputs
+
             if epoch>0 and step>5 and step != tot_steps-1:
                 time_list = [time.time()-t4, t0-t4, t1-t0, t2-t1, t5-t2, time.time()-t5, -1]
                 time_list.extend(tlist)
@@ -290,7 +292,7 @@ if __name__ == '__main__':
     argparser.add_argument('--eval-every', type=int, default=10)    
     argparser.add_argument('--lr', type=float, default=0.003)
     argparser.add_argument('--dropout', type=float, default=0.5)
-    argparser.add_argument('--num-workers', type=int, default=5,
+    argparser.add_argument('--num-workers', type=int, default=7,
                            help="Number of sampling processes. Use 0 for no extra process.")
     argparser.add_argument('--inductive', action='store_true',
                            help="Inductive learning setting")                         
