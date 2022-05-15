@@ -30,7 +30,7 @@ class ClusterIter(object):
             Whether to use precompute of AX
         """
         self.use_pp = use_pp
-        self.g = g.in_subgraph(seed_nid)
+        self.g = g.subgraph(seed_nid)
         # self.all_nid = g.in_edges(all_nid)
 
         print(self.g)
@@ -82,6 +82,11 @@ class ClusterIter(object):
     def __len__(self):
         return self.max
 
+    # def __getitem__(self, idx):
+    #     result = self.get_fn(self.g, self.par_li, idx,
+    #                             self.psize, self.batch_size)
+    #     return [[result]]
+
     def __iter__(self):
         self.n = 0
         return self
@@ -95,3 +100,5 @@ class ClusterIter(object):
         else:
             random.shuffle(self.par_li)
             raise StopIteration
+    # def reset(self):
+    #     random.shuffle(self.par_li)

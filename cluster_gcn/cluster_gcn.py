@@ -16,7 +16,7 @@ from modules import GraphSAGE
 from sampler import ClusterIter
 from utils import Logger, evaluate, save_log_dir, load_data, calc_f1
 from utils2.load_graph import *
-
+from utils2.compresser import Compresser
 def main(args):
     torch.manual_seed(args.rnd_seed)
     np.random.seed(args.rnd_seed)
@@ -95,12 +95,27 @@ def main(args):
         g = dgl.remove_self_loop(g)
         g = dgl.add_self_loop(g)
         print("adding self-loop edges")
+
+
     # metis only support int64 graph
     g = g.long()
 
+    print(g)
     cluster_iterator = ClusterIter(
         args.dataset, g, args.psize, args.batch_size, all_nid, use_pp=args.use_pp)
 
+    print('labels shape:', g.ndata['labels'].shape)
+    print("features shape, ", g.ndata['features'].shape)
+    # features = cluster_iterator.g.ndata.pop('features')
+
+    compresser = Compresser(args.mode, args.length, args.width)
+    if args.dataset=="mag240m":
+        features = compresser.compress(feats, args.dataset+"-clustergcn", batch_size=50000)
+    else:
+        features = cluster_iterator.g.ndata.pop('features')
+        features = compresser.compress(features, args.dataset+"-clustergcn")
+
+    print(cluster_iterator.g)
 
     # set device for dataset tensors
     if args.gpu < 0:
@@ -112,8 +127,8 @@ def main(args):
         test_mask = test_mask.cuda()
         # g = g.int().to(args.gpu)
 
-    print('labels shape:', g.ndata['labels'].shape)
-    print("features shape, ", g.ndata['features'].shape)
+
+    
 
     model = GraphSAGE(in_feats,
                       args.n_hidden,
@@ -144,6 +159,14 @@ def main(args):
                                  lr=args.lr,
                                  weight_decay=args.weight_decay)
 
+
+    # dataloader = torch.utils.data.DataLoader(
+    #     cluster_iterator,
+    #     batch_size=1,
+    #     shuffle=False,
+    #     num_workers=4,
+    # )
+
     # set train_nids to cuda tensor
     if cuda:
         train_nid = torch.from_numpy(train_nid).cuda()
@@ -154,15 +177,22 @@ def main(args):
     loss_mean = 0
     tic = time.time()
     f1_list = []
+    time_list = []
 
     for epoch in range(args.n_epochs):
         for j, cluster in enumerate(cluster_iterator):
             # sync with upper level training graph
+            # print(cluster)
+            t1 = time.time()
+            batch_inputs = compresser.decompress(features[cluster.ndata["_ID"]], torch.cuda.current_device())
+            t2 = time.time()
+            # print(t2-t1)
+
             if cuda:
                 cluster = cluster.to(torch.cuda.current_device())
             model.train()
             # forward
-            pred = model(cluster)
+            pred = model(cluster, batch_inputs)
             batch_labels = cluster.ndata['labels'].long()
             batch_train_mask = cluster.ndata['train_mask']
             loss = loss_f(pred[batch_train_mask],
@@ -182,12 +212,12 @@ def main(args):
                       f"{len(cluster_iterator)}:training loss", loss_mean, "train f1:", np.mean(f1_list))
         print("current memory:",
               torch.cuda.memory_allocated(device=pred.device) / 1024 / 1024, "time:", time.time() - tic, "\n")
-        tic = time.time()
+        time_list.append(time.time() - tic)
 
         # evaluate
         if epoch % args.val_every == 0:
             val_f1_mic, val_f1_mac, test_f1_mic, test_f1_mac = evaluate(
-                model, g, labels, multitask, cluster_iterator)
+                model, g, labels, multitask, cluster_iterator, features, compresser)
             print("Val F1-mic{:.4f}, Val F1-mac{:.4f}, Test F1-mic{:.4f}, Test F1-mac{:.4f}". 
                 format(val_f1_mic, val_f1_mac, test_f1_mic, test_f1_mac))
             if val_f1_mic > best_f1:
@@ -195,16 +225,18 @@ def main(args):
                 print('new best val f1:', best_f1)
                 torch.save(model.state_dict(), os.path.join(
                     log_dir, 'best_model.pkl'))
+        tic = time.time()
 
     end_time = time.time()
-    print(f'training using time {start_time-end_time}')
+    print(f'training using time {end_time - start_time}')
+    print(f'average time {np.mean(time_list)}')
 
     # test
     if args.use_val:
         model.load_state_dict(torch.load(os.path.join(
             log_dir, 'best_model.pkl')))
     val_f1_mic, val_f1_mac, test_f1_mic, test_f1_mac = evaluate(
-        model, g, labels, multitask, cluster_iterator)
+        model, g, labels, multitask, cluster_iterator, features, compresser)
     print("Val F1-mic{:.4f}, Val F1-mac{:.4f}, Test F1-mic{:.4f}, Test F1-mac{:.4f}". 
         format(val_f1_mic, val_f1_mac, test_f1_mic, test_f1_mac))
 
@@ -247,7 +279,9 @@ if __name__ == '__main__':
                         help="Weight for L2 loss")
     parser.add_argument("--note", type=str, default='none',
                         help="note for log dir")
-
+    parser.add_argument('--mode', type=str, default='sq')
+    parser.add_argument('--width', type=int, default=1)
+    parser.add_argument('--length', type=int, default=1)   
     args = parser.parse_args()
 
     print(args)

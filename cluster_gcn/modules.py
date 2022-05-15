@@ -90,8 +90,8 @@ class GraphSAGE(nn.Module):
         self.layers.append(GraphSAGELayer(n_hidden, n_classes, activation=None,
                                         dropout=dropout, use_pp=False, use_lynorm=False))
 
-    def forward(self, g):
-        h = g.ndata['features']
+    def forward(self, g, h):
+        # h = g.ndata['features']
         for layer in self.layers:
             # print(h.shape, layer)
             h = layer(g, h)

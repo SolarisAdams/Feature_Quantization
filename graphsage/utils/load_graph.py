@@ -160,6 +160,14 @@ def load_mag240m_subgraph():
     del dataset
     return graph, num_classes, dataset.all_paper_feat
 
+def load_ogbn_papers100m_in_subgraph():
+    graph = dgl.load_graphs("/data/giant_graph/in_subgraph/ogbn_papers100m.dgl")[0][0]
+    return graph, 172
+
+def load_mag240m_in_subgraph():
+    graph = dgl.load_graphs("/data/giant_graph/in_subgraph/mag240m.dgl")[0][0]
+    return graph, 153
+
 # @profile(precision=4,stream=open('memory_profiler.log','w+'))
 def load_ogb(name, root, overload=0, train=-1):
     # from ogb.nodeproppred import DglNodePropPredDataset

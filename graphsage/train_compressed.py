@@ -324,11 +324,15 @@ if __name__ == '__main__':
     elif args.dataset == 'ogbn-products':
         g, n_classes = load_ogb('ogbn-products', root="/data/graphData/original_dataset")
     elif args.dataset == 'ogbn-papers100m':
-        g, n_classes = load_ogb('ogbn-papers100M', root="/data/graphData/original_dataset")
-        srcs, dsts = g.all_edges()
-        g.add_edges(dsts, srcs)         
+        g, n_classes = load_ogbn_papers100m_in_subgraph()       
     elif args.dataset == 'mag240m':
-        g, n_classes, feats = load_mag240m()            
+        g, n_classes = load_mag240m_in_subgraph()     
+    # elif args.dataset == 'ogbn-papers100m':
+    #     g, n_classes = load_ogb('ogbn-papers100M', root="/data/graphData/original_dataset")
+    #     srcs, dsts = g.all_edges()
+    #     g.add_edges(dsts, srcs)         
+    # elif args.dataset == 'mag240m':
+    #     g, n_classes, feats = load_mag240m()                    
     else:
         raise Exception('unknown dataset')
 
@@ -336,11 +340,11 @@ if __name__ == '__main__':
     print(g, n_classes)
 ####################################################################################################################
     compresser = Compresser(args.mode, args.length, args.width)
-    if args.dataset=="mag240m":
+    # if args.dataset=="mag240m":
         
-        g.ndata["features"] = compresser.compress(feats, args.dataset, batch_size=50000)
-    else:
-        g.ndata["features"] = compresser.compress(g.ndata.pop("features"), args.dataset)
+    #     g.ndata["features"] = compresser.compress(feats, args.dataset, batch_size=50000)
+    # else:
+    g.ndata["features"] = compresser.compress(g.ndata.pop("features"), args.dataset)
 
 ####################################################################################################################
 

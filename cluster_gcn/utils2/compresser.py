@@ -231,6 +231,10 @@ class Compresser(object):
         return t_features
 
     def decompress(self, compressed_features, device=None):
+        if device is None:
+            device = self.device
+        else:
+            self.device = device        
         if self.quantized:
             if self.mode == "vq":
                 return self.vq_decompresser(compressed_features, device)
@@ -239,13 +243,10 @@ class Compresser(object):
             else:
                 raise ValueError("mode should be vq or sq")
         else:
-            return compressed_features.to(th.float32)
+            return compressed_features.to(th.float32).to(device)
 
     def vq_decompresser(self, compressed_features, device):
-        if device is None:
-            device = self.device
-        else:
-            self.device = device
+
         compressed_features = compressed_features.to(device).to(th.int64)
         self.codebooks = self.codebooks.to(device)
         num_parts = self.codebooks.shape[0]
@@ -259,10 +260,6 @@ class Compresser(object):
         return decompressed
 
     def sq_decompresser(self, compressed_features, device):
-        if device is None:
-            device = self.device
-        else:
-            self.device = device
 
         self.info = self.info.to(device)
         emin = self.info[0]

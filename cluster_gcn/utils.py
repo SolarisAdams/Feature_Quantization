@@ -48,7 +48,7 @@ def calc_f1(y_true, y_pred, multitask):
     return f1_score(y_true, y_pred, average="micro"), \
         f1_score(y_true, y_pred, average="macro")
 
-def evaluate(model, g, labels, multitask=False, cluster_iterator=None):
+def evaluate(model, g, labels, multitask, cluster_iterator, features, compresser):
     model.eval()
     with torch.no_grad():
         test_logits = []
@@ -56,9 +56,10 @@ def evaluate(model, g, labels, multitask=False, cluster_iterator=None):
         test_labels = []
         val_labels = []
         for j, cluster in enumerate(cluster_iterator):
+            inputs = compresser.decompress(features[cluster.ndata["_ID"]], torch.cuda.current_device())
             cluster = cluster.to(torch.cuda.current_device())
             # print(cluster)
-            pred = model(cluster)
+            pred = model(cluster, inputs)
             batch_labels = cluster.ndata['labels'].long()
             batch_val_mask = cluster.ndata['val_mask']
             batch_test_mask = cluster.ndata['test_mask']
