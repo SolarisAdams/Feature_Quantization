@@ -22,6 +22,7 @@ from gat import GAT
 from torch.optim.lr_scheduler import ExponentialLR
 from utils.load_graph import *
 from utils.compresser import Compresser
+import utils.storage as storage
 
 import tqdm
 import os
@@ -47,7 +48,7 @@ def accuracy(logits, labels):
     return correct.item() * 1.0 / len(labels)
 
 
-def evaluate(model, g, nfeat, labels, val_nid, device, compresser, n_classes):
+def evaluate(model, g, nfeat, labels, val_nid, device, compresser, n_classes, cacher):
     """
     Evaluate the model on the validation set specified by ``val_nid``.
     g : The entire graph.
@@ -79,19 +80,20 @@ def evaluate(model, g, nfeat, labels, val_nid, device, compresser, n_classes):
             blocks = [block.to(device) for block in blocks]
 
             batch_inputs, batch_labels = load_subtensor(nfeat, labels,
-                                                            output_nodes, input_nodes, device, compresser)                                                            
+                                                            output_nodes, input_nodes, device, compresser, cacher)                                                            
             result = model(blocks, batch_inputs).cpu()
             pred[output_nodes] = result
     model.train()
     return accuracy(pred[val_nid], labels[val_nid])
 
 
-def load_subtensor(nfeat, labels, seeds, input_nodes, dev_id, compresser):
+def load_subtensor(nfeat, labels, seeds, input_nodes, dev_id, compresser, cacher):
     """
     Extracts features and labels for a subset of nodes.
     """
     # t1 = time.time()
-    batch_inputs = th.index_select(nfeat, 0, input_nodes.to(nfeat.device))
+    # batch_inputs = th.index_select(nfeat, 0, input_nodes.to(nfeat.device))
+    batch_inputs = cacher.fetch_data(input_nodes)        
     # t2 = time.time()
 
     batch_inputs = batch_inputs.to(dev_id, non_blocking=True)
@@ -160,10 +162,7 @@ def main(args):
         th.cuda.set_device(args.gpu)
         if args.data_gpu:
             features = features.to(args.gpu)
-            labels = labels.to(args.gpu)
-        # else:
-        #     features = features.pin_memory()
-        #     labels = labels.to(args.gpu)          
+            labels = labels.to(args.gpu)         
         # g = g.int().to(args.gpu)
 
     n_edges = g.number_of_edges()
@@ -179,6 +178,58 @@ def main(args):
            len(train_nid),
            len(val_nid),
            len(test_nid)))
+
+
+
+
+
+
+    from dgl import function as fn
+    # reversed_g = dgl.reverse(g, copy_ndata=False)
+    print(g)
+    probability = th.zeros(g.num_nodes())
+    weight = 1.0
+    probability[train_nid] = weight
+    # print(th.min(g.out_degrees()))
+    # print(g.out_degrees(th.arange(100)))
+    print(g.out_degrees(train_nid))
+    # print(g.in_degrees(th.arange(100)))
+    # print(g.out_degrees(th.arange(100)))
+    # print(g.in_degrees(th.arange(100)))
+    affected_nodes = train_nid
+    # g.ndata["_d"] = g.out_degrees().to(th.float32)
+
+    fan_out = [int(fanout) for fanout in args.fan_out.split(',')]
+    for l in range(args.num_layers):
+        # weight *= 0.1
+        print("layer", l)
+
+        pp = probability.mul(th.minimum(th.tensor(fan_out[args.num_layers-l-1]).div(g.out_degrees().to(th.float32)), th.ones(g.num_nodes())))
+        print(pp.sum())
+        src, dst = g.in_edges(affected_nodes)
+        bs = 1000000
+        for i in range(0, len(src), bs):
+            probability[src[i:i+bs]] += pp[dst[i:i+bs]]
+        affected_nodes = src.unique()
+
+        # g.ndata["_P"] = g.ndata["_P"] + g.ndata["_p"]
+    g.ndata["_P"] = probability
+    # del g
+    print(g.ndata["_P"].sum())
+    print(g.ndata["_P"][10:300])
+    # g.ndata["_P"]
+    # g.ndata.pop("_p")
+    # g.ndata.pop("_tp")
+
+    print(g)
+
+
+
+
+
+
+
+
 
     # add self loop
     # g = dgl.remove_self_loop(g)
@@ -208,7 +259,13 @@ def main(args):
         
         )
 
-
+    t2fid = None
+    embed_names = ['features']    
+    cacher = storage.GraphCacheServer(features, g.num_nodes(), t2fid,  args.gpu)
+    del features
+    features = None
+    cacher.log = True
+    
     # create model
     heads = ([args.num_heads] * args.num_layers) + [args.num_out_heads]
     model = GAT(args.num_layers-1,
@@ -253,7 +310,7 @@ def main(args):
         for step, (input_nodes, seeds, blocks) in enumerate(dataloader):
 
             t2 = time.time()
-            batch_inputs, batch_labels = load_subtensor(features, labels, seeds, input_nodes, args.gpu, compresser)               
+            batch_inputs, batch_labels = load_subtensor(features, labels, seeds, input_nodes, args.gpu, compresser, cacher)               
             # forward
             t23 = time.time()
             blocks = [block.to(args.gpu) for block in blocks]
@@ -269,19 +326,20 @@ def main(args):
             optimizer.step()
             t5 = time.time()
             avg_loss = 0.02*loss.detach() + 0.98*avg_loss
-            if args.early_stop:
-                if stopper.step(loss.item()):
-                    print("Early stopping")
-                    break
+          
+
             tputs = 0.02*len(seeds) / (time.time() - t1)+0.98*tputs
             if step % args.log_every == 0:
                 acc = 0.5*accuracy(logits, batch_labels)+0.5*acc
                 print("Epoch {:05d} | Step {:05d} | Loss {:.4f} | Tputs {:.4f} | Train Acc {:.4f} | GPU {:.1f} MB".
                         format(epoch, step, avg_loss.item(), tputs, acc, torch.cuda.max_memory_allocated() / 1024 ** 2))
+            del batch_inputs
+            if epoch == 0 and step == 1:
+                cacher.auto_cache(g, embed_names, args.cache_rate, train_nid)                           
             # print(time.time()-t1, t2-t1, t3-t2, t23-t2, t3-t23, t4-t3, t5-t4, time.time()-t5)
             time_list.append([time.time()-t1, t2-t1, t23-t2, t3-t23, t4-t3, t5-t4, time.time()-t5])
             t1 = time.time()
-
+        print("hit rate", 1-cacher.get_miss_rate())
         scheduler.step()
         if epoch >= 1:
             dur.append(time.time() - t0)
@@ -291,9 +349,9 @@ def main(args):
             model.eval()
             with th.no_grad():
                 if args.dataset == 'mag240m':
-                    test_acc = evaluate(model, g, features, labels, val_nid, args.gpu, compresser, n_classes)
+                    test_acc = evaluate(model, g, features, labels, val_nid, args.gpu, compresser, n_classes, cacher)
                 else:
-                    test_acc = evaluate(model, g, features, labels, test_nid, args.gpu, compresser, n_classes)
+                    test_acc = evaluate(model, g, features, labels, test_nid, args.gpu, compresser, n_classes, cacher)
 
                 print("Epoch {:05d} | test Acc {:.4f} \n".
                         format(epoch, test_acc))
@@ -310,7 +368,7 @@ def main(args):
     with open("results/time_log.txt", "a+") as f:
         for i in np.mean(time_list[3:], axis=0):
             print("{:.5f}".format(i), sep="\t", end="\t", file=f)
-        print("-1", np.mean(dur), args.mode, args.length, args.width, args.dataset, args.num_workers, args.gpu, args.batch_size, "GAT", sep="\t", file=f)         
+        print("-1", np.mean(dur), args.mode, args.length, args.width, args.dataset, args.num_workers, args.gpu, args.batch_size, "GAT_cache", sep="\t", file=f)         
 
     with open("results/acc.txt", "a") as f:
         print(args.dataset, args.width, args.length, "GAT", acc, sep="\t", file=f)            
@@ -356,6 +414,7 @@ if __name__ == '__main__':
     parser.add_argument('--num-workers', type=int, default=7)
     parser.add_argument('--sample-gpu', action="store_true", default=False)
     parser.add_argument('--batch-size', type=int, default=1000)
+    parser.add_argument('--cache-rate', type=float, default=1.0)                            
     parser.add_argument('--mode', type=str, default='sq')
     parser.add_argument('--width', type=int, default=1)
     parser.add_argument('--length', type=int, default=1)                           

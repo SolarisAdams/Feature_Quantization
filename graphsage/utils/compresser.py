@@ -49,9 +49,9 @@ class Compresser(object):
         self.feat_dim = features.shape[1]
         print("in total ", math.ceil(features.shape[1]/self.width), " parts")
         self.codebooks = th.empty((math.ceil(features.shape[1]/self.width), self.length, self.width))
-        if self.length <256:
+        if self.length <=256:
             dtype = th.uint8
-        elif self.length <32768:
+        elif self.length <=32768:
             dtype = th.int16
         else:
             dtype = th.int32
@@ -96,9 +96,9 @@ class Compresser(object):
         
         print("in total ", math.ceil(features.shape[1]/self.width), " parts")
         self.codebooks = th.empty((math.ceil(features.shape[1]/self.width), self.length, self.width))
-        if self.length <256:
+        if self.length <=256:
             dtype = th.uint8
-        elif self.length <32768:
+        elif self.length <=32768:
             dtype = th.int16
         else:
             dtype = th.int32
