@@ -44,12 +44,16 @@ def main(args):
 
     elif args.dataset == 'ogbn-products':
         g, n_classes = load_ogb('ogbn-products', root="/data/graphData/original_dataset")
+    # elif args.dataset == 'ogbn-papers100m':
+    #     g, n_classes = load_ogb('ogbn-papers100M', root="/data/graphData/original_dataset")
+    #     srcs, dsts = g.all_edges()
+    #     g.add_edges(dsts, srcs)         
+    # elif args.dataset == 'mag240m':
+    #     g, n_classes, feats = load_mag240m()            
     elif args.dataset == 'ogbn-papers100m':
-        g, n_classes = load_ogb('ogbn-papers100M', root="/data/graphData/original_dataset")
-        srcs, dsts = g.all_edges()
-        g.add_edges(dsts, srcs)         
+        g, n_classes = load_ogbn_papers100m_in_subgraph()       
     elif args.dataset == 'mag240m':
-        g, n_classes, feats = load_mag240m()            
+        g, n_classes = load_mag240m_in_subgraph()          
     else:
         raise Exception('unknown dataset')
 
@@ -74,7 +78,10 @@ def main(args):
         features = scaler.transform(feats.data.numpy())
         g.ndata['features'] = torch.FloatTensor(features)
 
-    in_feats = g.ndata['features'].shape[1]
+    if args.dataset=="mag240m":
+        in_feats = 768
+    else:
+        in_feats = g.ndata['features'].shape[1]
 
     n_edges = g.number_of_edges()
 
@@ -107,17 +114,23 @@ def main(args):
         args.dataset, g, args.psize, args.batch_size, all_nid, use_pp=args.use_pp)
 
     print('labels shape:', g.ndata['labels'].shape)
-    print("features shape, ", g.ndata['features'].shape)
+    # print("features shape, ", g.ndata['features'].shape)
     # features = cluster_iterator.g.ndata.pop('features')
 
+    name = args.dataset
+    if args.use_pp:
+        name += '_pp'
     compresser = Compresser(args.mode, args.length, args.width)
-    if args.dataset=="mag240m":
-        features = compresser.compress(feats, args.dataset+"-clustergcn_in", batch_size=50000)
-    else:
-        features = cluster_iterator.g.ndata.pop('features')
-        features = compresser.compress(features, args.dataset+"-clustergcn_in")
+    # if args.dataset=="mag240m":
+    #     features = compresser.compress(feats, name, batch_size=50000)
+    # else:
+    features = cluster_iterator.g.ndata.pop('features')
+    features = compresser.compress(features, name)
 
     print(cluster_iterator.g)
+    cluster_iterator.g.ndata['train_mask'] = cluster_iterator.g.ndata['train_mask'].bool()
+    cluster_iterator.g.ndata['val_mask'] = cluster_iterator.g.ndata['val_mask'].bool()
+    cluster_iterator.g.ndata['test_mask'] = cluster_iterator.g.ndata['test_mask'].bool()
 
     # set device for dataset tensors
     if args.gpu < 0:
@@ -139,6 +152,8 @@ def main(args):
                       F.relu,
                       args.dropout,
                       args.use_pp)
+
+    print(model)
 
     if cuda:
         model.cuda()
@@ -206,6 +221,7 @@ def main(args):
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            del batch_inputs
             # in PPI case, `log_every` is chosen to log one time per epoch. 
             # Choose your log freq dynamically when you want more info within one epoch
             loss_mean = loss_mean*0.99 + loss.item()*0.01
