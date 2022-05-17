@@ -39,7 +39,7 @@ class GraphCacheServer:
         self.try_num = 0
         self.miss_num = 0
 
-    def auto_cache(self, dgl_g, embed_names, cache_rate, train_nid):
+    def auto_cache(self, dgl_g, embed_names, cache_rate, train_nid, prob=None):
         """
         Automatically cache the node features
         Params:
@@ -53,7 +53,7 @@ class GraphCacheServer:
         peak_cached_mem = torch.cuda.max_memory_cached(device=self.gpuid)
         total_mem = torch.cuda.get_device_properties(self.gpuid).total_memory
         available = total_mem - peak_allocated_mem - 0.3*peak_cached_mem \
-            - 512 * 1024 * 1024 - self.node_num  # in bytes
+            - 1024 * 1024 * 1024 - self.node_num  # in bytes
         # Stpe2: get capability
         csize = self.nfeats[0][0].element_size()
         self.capability = max(0, int(0.8*available / (self.total_dim * csize)))
@@ -75,8 +75,8 @@ class GraphCacheServer:
             print('cache the part of graph... caching percentage: {:.4f}'
                   .format(self.capability / self.node_num))
 
-            if "_P" in dgl_g.ndata and True:
-                sort_nid = torch.argsort(dgl_g.ndata["_P"], descending=True)
+            if prob:
+                sort_nid = torch.argsort(prob, descending=True)
                 # dgl_g.ndata.pop("_P")
             else:
                 out_degrees = dgl_g.out_degrees()

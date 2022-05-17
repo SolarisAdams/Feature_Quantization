@@ -85,13 +85,14 @@ def load_subtensor(nfeat, labels, seeds, input_nodes, dev_id, compresser, cacher
     # exp = th.index_select(nfeat, 0, input_nodes.to(nfeat.device))
     exp = cacher.fetch_data(input_nodes)    
     t1 = time.time()
-    exp = exp.to(dev_id)
-   
+    exp = exp.to(dev_id, non_blocking=True)
     t2 = time.time()        
+
+    batch_labels = th.index_select(labels, 0, seeds.to(labels.device))    
+    batch_labels = batch_labels.to(dev_id, non_blocking=True)   
     batch_inputs = compresser.decompress(exp, dev_id)
     t3 = time.time()
-    batch_labels = th.index_select(labels, 0, seeds.to(labels.device))    
-    batch_labels = batch_labels.to(dev_id)     
+
     return batch_inputs, batch_labels, [t1-t0, t2-t1, t3-t2]
 
 #### Entry point
@@ -199,7 +200,7 @@ def run(proc_id, n_gpus, args, devices, data, compresser):
             if proc_id == 0 and step==0 and epoch==0:
                 print(blocks)
             t1 = time.time()
-            blocks = [block.int().to(dev_id) for block in blocks]
+            blocks = [block.int().to(dev_id, non_blocking=True) for block in blocks]
             t2 = time.time()
             # Compute loss and prediction
             # print(batch_inputs.device, batch_labels.device)
@@ -244,7 +245,7 @@ def run(proc_id, n_gpus, args, devices, data, compresser):
         toc = time.time()
         if proc_id == 0:            
             print('Epoch Time(s): {:.4f}'.format(toc - tic))
-            if epoch >= 5:
+            if epoch >= 2:
                 avg += toc - tic
             if epoch % args.eval_every == 0 and epoch != 0:   
                 eval_acc = 0  
@@ -281,11 +282,11 @@ def run(proc_id, n_gpus, args, devices, data, compresser):
     print('\nTraining Time(s): {:.4f}'.format(time.time() - start_time))
 
     if proc_id == 0:    
-        print('Avg epoch time: {}'.format(avg / (epoch - 4)))
+        print('Avg epoch time: {}'.format(avg / (epoch - 1)))
         with open("results/time_log.txt", "a+") as f:
             for i in np.mean(time_log[3:], axis=0):
                 print("{:.5f}".format(i), sep="\t", end="\t", file=f)
-            print(avg / (epoch - 4), args.mode, args.length, args.width, args.dataset, args.num_workers, args.gpu, args.batch_size, "GraphSAGE_cache", sep="\t", file=f)         
+            print(avg / (epoch - 1), args.mode, args.length, args.width, args.dataset, args.num_workers, args.gpu, args.batch_size, "GraphSAGE_cache", sep="\t", file=f)         
     if proc_id == 0:
         with open("results/acc.txt", "a+") as f:
             print("GraphSAGE", args.mode, args.length, args.width, args.dataset, args.fan_out,  float(best_eval), float(best_test), sep="\t", file=f)
@@ -306,7 +307,7 @@ if __name__ == '__main__':
     argparser.add_argument('--eval-every', type=int, default=10)    
     argparser.add_argument('--lr', type=float, default=0.003)
     argparser.add_argument('--dropout', type=float, default=0.5)
-    argparser.add_argument('--num-workers', type=int, default=7,
+    argparser.add_argument('--num-workers', type=int, default=8,
                            help="Number of sampling processes. Use 0 for no extra process.")
     argparser.add_argument('--inductive', action='store_true',
                            help="Inductive learning setting")                         
@@ -388,33 +389,44 @@ if __name__ == '__main__':
 
 ####################################################################################################################
 
-    from dgl import function as fn
-    reversed_g = dgl.reverse(g, copy_ndata=False)
-    train_nid = (g.ndata["train_mask"]).nonzero().squeeze()
-    probability = th.zeros(g.num_nodes())
-    weight = 1.0
-    probability[train_nid] = weight
-    reversed_g.ndata["_P"] = probability
-    print(th.min(g.out_degrees()))
+    # from dgl import function as fn
+    # # reversed_g = dgl.reverse(g, copy_ndata=False)
+    # print(g)
+    # probability = th.zeros(g.num_nodes())
+    # weight = 1.0
+    # probability[train_nid] = weight
+    # # print(th.min(g.out_degrees()))
+    # # print(g.out_degrees(th.arange(100)))
+    # print(g.out_degrees(train_nid))
+    # # print(g.in_degrees(th.arange(100)))
+    # # print(g.out_degrees(th.arange(100)))
+    # # print(g.in_degrees(th.arange(100)))
+    # affected_nodes = train_nid
+    # # g.ndata["_d"] = g.out_degrees().to(th.float32)
 
-    # reversed_g.ndata["_d"] = reversed_g.out_degrees().to(th.float32)
-    fan_out = [int(fanout) for fanout in args.fan_out.split(',')]
-    for l in range(args.num_layers):
-        # weight *= 0.1
-        reversed_g.ndata['_p'] = th.minimum(reversed_g.ndata['_P'], th.ones(g.num_nodes()).mul(weight)).mul(th.minimum(th.tensor(fan_out[args.num_layers-l-1]).div(g.out_degrees().to(th.float32)), th.ones(g.num_nodes())))
-        reversed_g.ndata['_p'] = th.log(1-reversed_g.ndata['_p'])
-        reversed_g.update_all(fn.copy_u("_p", "m"), fn.sum("m", "_tp"))
-        reversed_g.ndata['_tp'] = 1-th.exp(reversed_g.ndata['_tp'])
-        reversed_g.ndata['_P'] = th.minimum(reversed_g.ndata['_P']+reversed_g.ndata['_tp'], th.ones(g.num_nodes()))
+    # fan_out = [int(fanout) for fanout in args.fan_out.split(',')]
+    # for l in range(args.num_layers):
+    #     # weight *= 0.1
+    #     print("layer", l)
 
-        # reversed_g.ndata["_P"] = reversed_g.ndata["_P"] + reversed_g.ndata["_p"]
-    g.ndata["_P"] = reversed_g.ndata["_P"]
-    del reversed_g
-    print(g.ndata["_P"][0:10])
-    print(g.ndata["_P"][10:300])
-    g.ndata["_P"]
-    # g.ndata.pop("_p")
-    print(g)
+    #     pp = probability.mul(th.minimum(th.tensor(fan_out[args.num_layers-l-1]).div(g.out_degrees().to(th.float32)), th.ones(g.num_nodes())))
+    #     print(pp.sum())
+    #     src, dst = g.in_edges(affected_nodes)
+    #     bs = 1000000
+    #     for i in range(0, len(src), bs):
+    #         probability[src[i:i+bs]] += pp[dst[i:i+bs]]
+    #     affected_nodes = src.unique()
+
+    #     # g.ndata["_P"] = g.ndata["_P"] + g.ndata["_p"]
+    # g.ndata["_P"] = probability
+    # # del g
+    # print(g.ndata["_P"].sum())
+    # print(g.ndata["_P"][10:300])
+    # # g.ndata["_P"]
+    # # g.ndata.pop("_p")
+    # # g.ndata.pop("_tp")
+
+    # print(g)
 
 
     accs = []

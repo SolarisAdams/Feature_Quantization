@@ -83,13 +83,14 @@ def load_subtensor(nfeat, labels, seeds, input_nodes, dev_id, compresser):
     t0 = time.time() 
     exp = th.index_select(nfeat, 0, input_nodes.to(nfeat.device))
     t1 = time.time()
-    exp = exp.to(dev_id)
-   
+    exp = exp.to(dev_id, non_blocking=True)
     t2 = time.time()        
+
+    batch_labels = th.index_select(labels, 0, seeds.to(labels.device))    
+    batch_labels = batch_labels.to(dev_id, non_blocking=True)   
     batch_inputs = compresser.decompress(exp, dev_id)
     t3 = time.time()
-    batch_labels = th.index_select(labels, 0, seeds.to(labels.device))    
-    batch_labels = batch_labels.to(dev_id)     
+  
     return batch_inputs, batch_labels, [t1-t0, t2-t1, t3-t2]
 
 #### Entry point
@@ -189,7 +190,7 @@ def run(proc_id, n_gpus, args, devices, data, compresser):
             if proc_id == 0 and step==0 and epoch==0:
                 print(blocks)
             t1 = time.time()
-            blocks = [block.int().to(dev_id) for block in blocks]
+            blocks = [block.int().to(dev_id, non_blocking=True) for block in blocks]
             t2 = time.time()
             # Compute loss and prediction
             # print(batch_inputs.device, batch_labels.device)
@@ -233,7 +234,7 @@ def run(proc_id, n_gpus, args, devices, data, compresser):
         toc = time.time()
         if proc_id == 0:            
             print('Epoch Time(s): {:.4f}'.format(toc - tic))
-            if epoch >= 5:
+            if epoch >= 2:
                 avg += toc - tic
             if epoch % args.eval_every == 0 and epoch != 0:   
                 eval_acc = 0  
@@ -267,11 +268,11 @@ def run(proc_id, n_gpus, args, devices, data, compresser):
     # if n_gpus > 1:
     #     th.distributed.barrier()
     if proc_id == 0:    
-        print('Avg epoch time: {}'.format(avg / (epoch - 4)))
+        print('Avg epoch time: {}'.format(avg / (epoch - 1)))
         with open("results/time_log.txt", "a+") as f:
             for i in np.mean(time_log[3:], axis=0):
                 print("{:.5f}".format(i), sep="\t", end="\t", file=f)
-            print(args.mode, args.length, args.width, args.dataset, args.num_workers, args.gpu, args.batch_size, "GraphSAGE", sep="\t", file=f)         
+            print(avg / (epoch - 1), args.mode, args.length, args.width, args.dataset, args.num_workers, args.gpu, args.batch_size, "GraphSAGE", sep="\t", file=f)         
     if proc_id == 0:
         with open("results/acc.txt", "a+") as f:
             print("GraphSAGE", args.mode, args.length, args.width, args.dataset, args.fan_out,  float(best_eval), float(best_test), sep="\t", file=f)
@@ -325,16 +326,16 @@ if __name__ == '__main__':
 
     elif args.dataset == 'ogbn-products':
         g, n_classes = load_ogb('ogbn-products', root="/data/graphData/original_dataset")
-    elif args.dataset == 'ogbn-papers100m':
-        g, n_classes = load_ogbn_papers100m_in_subgraph()       
-    elif args.dataset == 'mag240m':
-        g, n_classes = load_mag240m_in_subgraph()     
     # elif args.dataset == 'ogbn-papers100m':
-    #     g, n_classes = load_ogb('ogbn-papers100M', root="/data/graphData/original_dataset")
-    #     srcs, dsts = g.all_edges()
-    #     g.add_edges(dsts, srcs)         
+    #     g, n_classes = load_ogbn_papers100m_in_subgraph()       
     # elif args.dataset == 'mag240m':
-    #     g, n_classes, feats = load_mag240m()                    
+    #     g, n_classes = load_mag240m_in_subgraph()     
+    elif args.dataset == 'ogbn-papers100m':
+        g, n_classes = load_ogb('ogbn-papers100M', root="/data/graphData/original_dataset")
+        srcs, dsts = g.all_edges()
+        g.add_edges(dsts, srcs)         
+    elif args.dataset == 'mag240m':
+        g, n_classes, feats = load_mag240m()                    
     else:
         raise Exception('unknown dataset')
 
@@ -342,11 +343,11 @@ if __name__ == '__main__':
     print(g, n_classes)
 ####################################################################################################################
     compresser = Compresser(args.mode, args.length, args.width)
-    # if args.dataset=="mag240m":
+    if args.dataset=="mag240m":
         
-    #     g.ndata["features"] = compresser.compress(feats, args.dataset, batch_size=50000)
-    # else:
-    g.ndata["features"] = compresser.compress(g.ndata.pop("features"), args.dataset)
+        g.ndata["features"] = compresser.compress(feats, args.dataset, batch_size=50000)
+    else:
+        g.ndata["features"] = compresser.compress(g.ndata.pop("features"), args.dataset)
 
 ####################################################################################################################
 

@@ -25,6 +25,7 @@ class Compresser(object):
             self.fn = "/data/giant_graph/quantized/" + dn + "_" + self.mode + "_" + str(self.length) + "_" + str(self.width) + ".pkl"
         import os 
         if dn and os.path.exists(self.fn):
+            del features
             (compressed, self.codebooks, self.quantized, self.info, self.feat_dim) = th.load(self.fn)
             return compressed
         else:
@@ -57,10 +58,9 @@ class Compresser(object):
             dtype = th.int32
         cluster_ids = th.empty((features.shape[0], math.ceil(features.shape[1]/self.width)), dtype=dtype)
         
-
         for i in range(math.ceil(features.shape[1]/self.width)):  
             print("quantizing part ", i)
-            X = features[:, i*self.width:i*self.width+self.width]
+            X = features[:, i*self.width:i*self.width+self.width].float()
             dist = X.norm(dim=1, p=2)
             method = "cosine"
             out_num = self.length - 1

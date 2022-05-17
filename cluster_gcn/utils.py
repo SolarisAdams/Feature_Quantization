@@ -48,6 +48,9 @@ def calc_f1(y_true, y_pred, multitask):
     return f1_score(y_true, y_pred, average="micro"), \
         f1_score(y_true, y_pred, average="macro")
 
+def calc_acc(y_true, y_pred):        
+    return (torch.argmax(y_pred, dim=1) == y_true).float().sum() / len(y_pred)
+
 def evaluate(model, g, labels, multitask, cluster_iterator, features, compresser):
     model.eval()
     with torch.no_grad():
@@ -74,7 +77,8 @@ def evaluate(model, g, labels, multitask, cluster_iterator, features, compresser
         val_labels = torch.cat(val_labels, dim=0)
         test_f1_mic, test_f1_mac = calc_f1(test_labels.cpu().numpy(), test_logits.cpu().numpy(), multitask)
         val_f1_mic, val_f1_mac = calc_f1(val_labels.cpu().numpy(), val_logits.cpu().numpy(), multitask)
-        return test_f1_mic, test_f1_mac, val_f1_mic, val_f1_mac
+        test_acc = calc_acc(test_labels.cpu(), test_logits.cpu())
+        return test_f1_mic, test_f1_mac, val_f1_mic, val_f1_mac, test_acc
 
 def load_data(args):
     '''Wraps the dgl's load_data utility to handle ppi special case'''

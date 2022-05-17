@@ -184,44 +184,41 @@ def main(args):
 
 
 
-    from dgl import function as fn
-    # reversed_g = dgl.reverse(g, copy_ndata=False)
-    print(g)
-    probability = th.zeros(g.num_nodes())
-    weight = 1.0
-    probability[train_nid] = weight
-    # print(th.min(g.out_degrees()))
-    # print(g.out_degrees(th.arange(100)))
-    print(g.out_degrees(train_nid))
-    # print(g.in_degrees(th.arange(100)))
-    # print(g.out_degrees(th.arange(100)))
-    # print(g.in_degrees(th.arange(100)))
-    affected_nodes = train_nid
-    # g.ndata["_d"] = g.out_degrees().to(th.float32)
+    # from dgl import function as fn
+    # # reversed_g = dgl.reverse(g, copy_ndata=False)
+    # print(g)
+    # probability = th.zeros(g.num_nodes())
+    # weight = 1.0
+    # probability[train_nid] = weight
+    # # print(th.min(g.out_degrees()))
+    # # print(g.out_degrees(th.arange(100)))
+    # print(g.out_degrees(train_nid))
+    # # print(g.in_degrees(th.arange(100)))
+    # # print(g.out_degrees(th.arange(100)))
+    # # print(g.in_degrees(th.arange(100)))
+    # affected_nodes = train_nid
+    # # g.ndata["_d"] = g.out_degrees().to(th.float32)
 
-    fan_out = [int(fanout) for fanout in args.fan_out.split(',')]
-    for l in range(args.num_layers):
-        # weight *= 0.1
-        print("layer", l)
+    # fan_out = [int(fanout) for fanout in args.fan_out.split(',')]
+    # for l in range(args.num_layers):
+    #     # weight *= 0.1
+    #     print("layer", l)
 
-        pp = probability.mul(th.minimum(th.tensor(fan_out[args.num_layers-l-1]).div(g.out_degrees().to(th.float32)), th.ones(g.num_nodes())))
-        print(pp.sum())
-        src, dst = g.in_edges(affected_nodes)
-        bs = 1000000
-        for i in range(0, len(src), bs):
-            probability[src[i:i+bs]] += pp[dst[i:i+bs]]
-        affected_nodes = src.unique()
+    #     pp = probability.mul(th.minimum(th.tensor(fan_out[args.num_layers-l-1]).div(g.out_degrees().to(th.float32)), th.ones(g.num_nodes())))
+    #     print(pp.sum())
+    #     src, dst = g.in_edges(affected_nodes)
+    #     bs = 1000000
+    #     for i in range(0, len(src), bs):
+    #         probability[src[i:i+bs]] += pp[dst[i:i+bs]]
+    #     affected_nodes = src.unique()
 
-        # g.ndata["_P"] = g.ndata["_P"] + g.ndata["_p"]
-    g.ndata["_P"] = probability
-    # del g
-    print(g.ndata["_P"].sum())
-    print(g.ndata["_P"][10:300])
-    # g.ndata["_P"]
-    # g.ndata.pop("_p")
-    # g.ndata.pop("_tp")
+    #     # g.ndata["_P"] = g.ndata["_P"] + g.ndata["_p"]
+    # # del g
+    # # g.ndata["_P"]
+    # # g.ndata.pop("_p")
+    # # g.ndata.pop("_tp")
 
-    print(g)
+    # print(g)
 
 
 
@@ -313,7 +310,7 @@ def main(args):
             batch_inputs, batch_labels = load_subtensor(features, labels, seeds, input_nodes, args.gpu, compresser, cacher)               
             # forward
             t23 = time.time()
-            blocks = [block.to(args.gpu) for block in blocks]
+            blocks = [block.to(args.gpu, non_blocking=True) for block in blocks]
             t3 = time.time()
 
             logits = model(blocks, batch_inputs)
@@ -333,9 +330,9 @@ def main(args):
                 acc = 0.5*accuracy(logits, batch_labels)+0.5*acc
                 print("Epoch {:05d} | Step {:05d} | Loss {:.4f} | Tputs {:.4f} | Train Acc {:.4f} | GPU {:.1f} MB".
                         format(epoch, step, avg_loss.item(), tputs, acc, torch.cuda.max_memory_allocated() / 1024 ** 2))
-            del batch_inputs
+            # del batch_inputs
             if epoch == 0 and step == 1:
-                cacher.auto_cache(g, embed_names, args.cache_rate, train_nid)                           
+                cacher.auto_cache(g, embed_names, args.cache_rate, train_nid)                        
             # print(time.time()-t1, t2-t1, t3-t2, t23-t2, t3-t23, t4-t3, t5-t4, time.time()-t5)
             time_list.append([time.time()-t1, t2-t1, t23-t2, t3-t23, t4-t3, t5-t4, time.time()-t5])
             t1 = time.time()
@@ -363,7 +360,7 @@ def main(args):
 
 
 
-    print()
+    print("avg epoch time:", np.mean(dur))
     print("Best Accuracy {:.4f}".format(best_acc))
     with open("results/time_log.txt", "a+") as f:
         for i in np.mean(time_list[3:], axis=0):
@@ -381,7 +378,7 @@ if __name__ == '__main__':
     parser.add_argument("--dataset", type=str, default="reddit")
     parser.add_argument("--gpu", type=int, default=3,
                         help="which GPU to use. Set -1 to use CPU.")
-    parser.add_argument("--epochs", type=int, default=4,
+    parser.add_argument("--epochs", type=int, default=5,
                         help="number of training epochs")
     parser.add_argument("--num-heads", type=int, default=8,
                         help="number of hidden attention heads")
@@ -409,7 +406,7 @@ if __name__ == '__main__':
     parser.add_argument('--fastmode', action="store_true", default=False,
                         help="skip re-evaluate the validation set")
     parser.add_argument('--log-every', type=int, default=20)
-    parser.add_argument('--eval-every', type=int, default=5)
+    parser.add_argument('--eval-every', type=int, default=10)
     parser.add_argument('--data-gpu', action="store_true", default=False)
     parser.add_argument('--num-workers', type=int, default=7)
     parser.add_argument('--sample-gpu', action="store_true", default=False)

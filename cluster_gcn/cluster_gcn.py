@@ -17,6 +17,8 @@ from sampler import ClusterIter
 from utils import Logger, evaluate, save_log_dir, load_data, calc_f1
 from utils2.load_graph import *
 from utils2.compresser import Compresser
+from torch.optim.lr_scheduler import ExponentialLR
+
 def main(args):
     torch.manual_seed(args.rnd_seed)
     np.random.seed(args.rnd_seed)
@@ -110,10 +112,10 @@ def main(args):
 
     compresser = Compresser(args.mode, args.length, args.width)
     if args.dataset=="mag240m":
-        features = compresser.compress(feats, args.dataset+"-clustergcn", batch_size=50000)
+        features = compresser.compress(feats, args.dataset+"-clustergcn_in", batch_size=50000)
     else:
         features = cluster_iterator.g.ndata.pop('features')
-        features = compresser.compress(features, args.dataset+"-clustergcn")
+        features = compresser.compress(features, args.dataset+"-clustergcn_in")
 
     print(cluster_iterator.g)
 
@@ -158,7 +160,7 @@ def main(args):
     optimizer = torch.optim.Adam(model.parameters(),
                                  lr=args.lr,
                                  weight_decay=args.weight_decay)
-
+    scheduler = ExponentialLR(optimizer, gamma=0.98)
 
     # dataloader = torch.utils.data.DataLoader(
     #     cluster_iterator,
@@ -213,13 +215,15 @@ def main(args):
         print("current memory:",
               torch.cuda.memory_allocated(device=pred.device) / 1024 / 1024, "time:", time.time() - tic, "\n")
         time_list.append(time.time() - tic)
+        scheduler.step()
+        print(f'average time {np.mean(time_list)}')
 
         # evaluate
         if epoch % args.val_every == 0:
-            val_f1_mic, val_f1_mac, test_f1_mic, test_f1_mac = evaluate(
+            val_f1_mic, val_f1_mac, test_f1_mic, test_f1_mac, test_acc = evaluate(
                 model, g, labels, multitask, cluster_iterator, features, compresser)
-            print("Val F1-mic{:.4f}, Val F1-mac{:.4f}, Test F1-mic{:.4f}, Test F1-mac{:.4f}". 
-                format(val_f1_mic, val_f1_mac, test_f1_mic, test_f1_mac))
+            print("Val F1-mic{:.4f}, Val F1-mac{:.4f}, Test F1-mic{:.4f}, Test F1-mac{:.4f}, Test acc{:.4f}". 
+                format(val_f1_mic, val_f1_mac, test_f1_mic, test_f1_mac, test_acc))
             if val_f1_mic > best_f1:
                 best_f1 = val_f1_mic
                 print('new best val f1:', best_f1)
@@ -235,10 +239,10 @@ def main(args):
     if args.use_val:
         model.load_state_dict(torch.load(os.path.join(
             log_dir, 'best_model.pkl')))
-    val_f1_mic, val_f1_mac, test_f1_mic, test_f1_mac = evaluate(
+    val_f1_mic, val_f1_mac, test_f1_mic, test_f1_mac, test_acc = evaluate(
         model, g, labels, multitask, cluster_iterator, features, compresser)
-    print("Val F1-mic{:.4f}, Val F1-mac{:.4f}, Test F1-mic{:.4f}, Test F1-mac{:.4f}". 
-        format(val_f1_mic, val_f1_mac, test_f1_mic, test_f1_mac))
+    print("Val F1-mic{:.4f}, Val F1-mac{:.4f}, Test F1-mic{:.4f}, Test F1-mac{:.4f}, Test acc{:.4f}". 
+        format(val_f1_mic, val_f1_mac, test_f1_mic, test_f1_mac, test_acc))
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='GCN')

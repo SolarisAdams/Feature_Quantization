@@ -53,7 +53,7 @@ class GraphCacheServer:
         peak_cached_mem = torch.cuda.max_memory_cached(device=self.gpuid)
         total_mem = torch.cuda.get_device_properties(self.gpuid).total_memory
         available = total_mem - peak_allocated_mem - 0.3*peak_cached_mem \
-            - 512 * 1024 * 1024 - self.node_num  # in bytes
+            - 1024 * 1024 * 1024 - self.node_num  # in bytes
         # Stpe2: get capability
         csize = self.nfeats[0][0].element_size()
         self.capability = max(0, int(0.8*available / (self.total_dim * csize)))
