@@ -44,14 +44,14 @@ def main(args):
 
     elif args.dataset == 'ogbn-products':
         g, n_classes = load_ogb('ogbn-products', root="/data/graphData/original_dataset")
-    # elif args.dataset == 'ogbn-papers100m':
-    #     g, n_classes = load_ogb('ogbn-papers100M', root="/data/graphData/original_dataset")
-    #     srcs, dsts = g.all_edges()
-    #     g.add_edges(dsts, srcs)         
+    elif args.dataset == 'ogbn-papers100m':
+        g, n_classes = load_ogb('ogbn-papers100M', root="/data/graphData/original_dataset")
+        srcs, dsts = g.all_edges()
+        g.add_edges(dsts, srcs)         
     # elif args.dataset == 'mag240m':
     #     g, n_classes, feats = load_mag240m()            
-    elif args.dataset == 'ogbn-papers100m':
-        g, n_classes = load_ogbn_papers100m_in_subgraph()       
+    # elif args.dataset == 'ogbn-papers100m':
+    #     g, n_classes = load_ogbn_papers100m_in_subgraph()       
     elif args.dataset == 'mag240m':
         g, n_classes = load_mag240m_in_subgraph()          
     else:
@@ -71,12 +71,8 @@ def main(args):
 
     # Normalize features
     if args.normalize:
-        feats = g.ndata['features']
-        train_feats = feats[train_mask]
-        scaler = sklearn.preprocessing.StandardScaler()
-        scaler.fit(train_feats.data.numpy())
-        features = scaler.transform(feats.data.numpy())
-        g.ndata['features'] = torch.FloatTensor(features)
+        g.ndata['features'] = g.ndata["features"].sub_(g.ndata["features"][:100000].mean(dim=0)).div_(g.ndata["features"][:100000].std(dim=0))
+
 
     if args.dataset=="mag240m":
         in_feats = 768
@@ -175,7 +171,7 @@ def main(args):
     optimizer = torch.optim.Adam(model.parameters(),
                                  lr=args.lr,
                                  weight_decay=args.weight_decay)
-    scheduler = ExponentialLR(optimizer, gamma=0.98)
+    scheduler = ExponentialLR(optimizer, gamma=0.97)
 
     # dataloader = torch.utils.data.DataLoader(
     #     cluster_iterator,
@@ -204,7 +200,8 @@ def main(args):
             batch_inputs = compresser.decompress(features[cluster.ndata["_ID"]], torch.cuda.current_device())
             t2 = time.time()
             # print(t2-t1)
-
+            if epoch == 0 and j == 0:
+                print(cluster)
             if cuda:
                 cluster = cluster.to(torch.cuda.current_device())
             model.train()

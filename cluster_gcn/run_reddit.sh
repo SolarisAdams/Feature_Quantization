@@ -13,7 +13,12 @@
 /home/Adama/Envs/DGL/bin/python /home/Adama/DGL/feature_compression/cluster_gcn/cluster_gcn.py  --gpu 0 \
   --dataset mag240m --lr 1e-3 --weight-decay 0.0 --psize 4000 --batch-size 3 --n-epochs 100 \
   --n-hidden 256 --n-layers 1 --log-every 50 --note papers100m-non-sym-ly3-nopp-cluster-2-2-wd-5e-4 \
-  --dropout 0.1 --use-val
+  --dropout 0.1 --use-val --normalize
+
+/home/Adama/Envs/DGL/bin/python /home/Adama/DGL/feature_compression/cluster_gcn/cluster_gcn.py  --gpu 0 \
+  --dataset mag240m --lr 1e-4 --weight-decay 0.0 --psize 10000 --batch-size 20 --n-epochs 100 \
+  --n-hidden 256 --n-layers 1 --log-every 50 --note mag240m-non-sym-ly3-nopp-cluster-2-2-wd-5e-4 \
+  --dropout 0.1 --use-val --normalize
 
 
   /home/Adama/Envs/DGL/bin/python /home/Adama/DGL/feature_compression/cluster_gcn/cluster_gcn.py  --gpu 2   --dataset mag240m --lr 1e-3 --weight-decay 0.0 --psize 4000 --batch-size 10 --n-epochs 100   --n-hidden 256 --n-layers 1 --log-every 50 --note papers100m-non-sym-ly3-nopp-cluster-2-2-wd-5e-4 --dropout 0.1 --use-val

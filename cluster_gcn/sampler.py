@@ -31,7 +31,8 @@ class ClusterIter(object):
         """
         self.use_pp = use_pp
         # self.g = g.subgraph(seed_nid)
-        self.g = g.in_subgraph(seed_nid)
+        self.g = g.in_subgraph(seed_nid, relabel_nodes=True)
+        self.g.ndata["id"] = self.g.ndata["_ID"]
         # self.all_nid = g.in_edges(all_nid)
 
         print(self.g)
@@ -44,11 +45,11 @@ class ClusterIter(object):
         self.batch_size = batch_size
         # cache the partitions of known datasets&partition number
         if dn:
-            fn = os.path.join('/data/giant_graph/clustergcn_in_cache/', dn + '_{}.npy'.format(psize))
+            fn = os.path.join('/data/giant_graph/clustergcn_in2_cache/', dn + '_{}.npy'.format(psize))
             if os.path.exists(fn):
                 self.par_li = np.load(fn, allow_pickle=True)
             else:
-                os.makedirs('/data/giant_graph/clustergcn_in_cache/', exist_ok=True)
+                os.makedirs('/data/giant_graph/clustergcn_in2_cache/', exist_ok=True)
                 self.par_li = get_partition_list(self.g, psize)
                 np.save(fn, self.par_li)
         else:
