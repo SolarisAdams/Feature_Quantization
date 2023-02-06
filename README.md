@@ -55,8 +55,7 @@ Scalar quantization uses a log-uniform quantization method because graph feature
 Below, we introduce the feature quantization formula:
 
 $$
-Q(x)  =  \begin{cases}
- - \lceil  \frac{Clip(log_{2}(-x))-e_{min}}{e_{max}-e_{min}} *2^{k-1}\rceil , &x<0   \\
+Q(x)  =  \begin{cases}-\lceil  \frac{Clip(log_{2}(-x))-e_{min}}{e_{max}-e_{min}} *2^{k-1}\rceil , &x<0   \\
 \lfloor \frac{Clip(log_{2}x)-e_{min}}{e_{max}-e_{min}} *2^{k-1}\rfloor, &x\ge0     \\
 \end{cases}
 $$
