@@ -53,15 +53,18 @@ decompress:
 Scalar quantization uses a log-uniform quantization method because graph features are mostly near a normal distribution and have most of their values near zero. Log-uniform quantization reduces the overall quantization error and helps keep model accuracy. 
 
 Below, we introduce the feature quantization formula:
+
 $$
 Q(x)  =  \begin{cases}
  - \lceil  \frac{Clip(log_{2}(-x))-e_{min}}{e_{max}-e_{min}} *2^{k-1}\rceil , &x<0   \\
 \lfloor \frac{Clip(log_{2}x)-e_{min}}{e_{max}-e_{min}} *2^{k-1}\rfloor, &x\ge0     \\
 \end{cases}
 $$
+
 where $x$ is the original feature, $e_{min}$ and $e_{max}$ are the minimum and maximum values respectively of binary logarithm on non-negative $x$ after clipping outlier values, i.e., $Clip(log_{2}|x|)$.
 
 And the dequantization is the reversed operation of the quantization.
+
 $$
 Q^{-1}(q)  =  \begin{cases}
 exp2 \left (\frac{(2^{k-1}-0.5 - q)*(e_{max}-e_{min})}{2^{k-1}}+e_{min} \right ), q<2^{k-1}   \\
