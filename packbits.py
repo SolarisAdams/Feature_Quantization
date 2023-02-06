@@ -31,31 +31,10 @@ def packbits(tensor, dim = -1, mask = 0b00000001, out = None, dtype = torch.uint
     return out
 
 def unpackbits(tensor, shape, dim = -1, mask = 0b00000001, out = None, dtype = torch.uint8):
-    # f0 = time.time()
     _, packed_size, nbits = packshape(shape, dim = dim, mask = mask, dtype = tensor.dtype)
-    # f1 = time.time()
-    # out = out.zero_() if out is not None else torch.empty(shape, device = tensor.device, dtype = dtype)
-    # out.fill_((1 << nbits) - 1)
-    # torch.cuda.synchronize()
-    # f2 = time.time()
-    # assert tuple(out.shape) == tuple(shape)
-    # p = 0
     ts = []
     for e in range(packed_size):
-        t0 = time.time()
-        t1 = time.time()
         ts.append(((tensor >> (nbits * (packed_size - e - 1))).bitwise_and_((1 << nbits) - 1)).narrow(dim, 0, (shape[dim]-e-1)//packed_size+1))
-
-        # out[(slice(None),) * (dim if dim >= 0 else dim + tensor.dim()) + (slice(e, None, packed_size), )] = ((tensor >> (nbits * (packed_size - e - 1))).bitwise_and_((1 << nbits) - 1)).narrow(dim, 0, (out.shape[dim]-e-1)//packed_size+1)
-        # out[(slice(None),) * (dim if dim >= 0 else dim + tensor.dim()) + (slice(p, p+((out.shape[dim]-e-1)//packed_size+1), 1), )] = ((tensor >> (nbits * (packed_size - e - 1))).bitwise_and_((1 << nbits) - 1)).narrow(dim, 0, (out.shape[dim]-e-1)//packed_size+1)
-        # p += (out.shape[dim]-e-1)//packed_size+1
-
-        # torch.cuda.synchronize()
-
-        t2 = time.time()
-        # print("    ", e, t1-t0, t2-t1, t2-t0)
-    # f3 = time.time()
-    # print(f1-f0, f2-f1, f3-f2, f3-f0)
     return torch.cat(ts, -1)
 
 if __name__ == '__main__':
@@ -74,6 +53,3 @@ if __name__ == '__main__':
 
                 z = unpackbits(y, mask = mask, dtype = x.dtype, shape = x.shape)
                 print("done.", z.size())
-
-                # print(t1-t0, t2-t1)
-                # assert torch.allclose(x, z)
